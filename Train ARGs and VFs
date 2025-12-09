@@ -1,0 +1,112 @@
+%% ARGs and VFs
+% Author: Zhonghua Shen
+% Date: 2025-12-05
+% Description: Train MLP for ARGs and VFs
+
+%% -------------------------------
+% ARGs and VFs
+%% ------------------------------
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dense, Dropout, Input
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+import scipy.io as sio
+
+% Open the Data
+loadedData = load('fold_data.mat');
+loadedData = load('full_test_data.mat');
+
+    cross_val_data = data['fold_data']
+    first_fold = cross_val_data[0, 0]
+
+    X_train_genes = first_fold['X_train_genes']
+    Y_train = first_fold['Y_train']
+    X_test_genes = first_fold['X_test_genes']
+    Y_test = first_fold['Y_test']
+
+% MLP
+    genes_input = Input(shape=input_shape_genes, name="Genes_Input")
+    y = Dense(64, activation='relu')(genes_input)  
+    y = Dropout(0.5)(y)
+
+    z = Dense(64, activation='relu')(y)  
+    z = Dense(22, activation='relu')(z)  
+
+    output = Dense(num_classes, activation='sigmoid')(z)  
+  
+    model = Model(inputs=genes_input, outputs=output)
+    return model
+
+% Train
+def train_and_evaluate(model, X_train_genes, Y_train, X_test_genes, Y_test):
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+    model.fit(X_train_genes, Y_train, epochs=20, batch_size=32,
+              validation_data=(X_test_genes, Y_test))
+    Y_pred = model.predict(X_test_genes)
+    Y_pred = (Y_pred > 0.5).astype(int)
+    accuracy = accuracy_score(Y_test, Y_pred)
+    precision, recall, f1, _ = precision_recall_fscore_support(Y_test, Y_pred, average='micro', zero_division=0)
+    return accuracy, precision, recall, f1
+
+% Evaluation
+    full_test_data = data['full_test_data'][0]  
+    X_test_genes_full = full_test_data['X_test_genes_full'][0]  
+Y_test_full = full_test_data['Y_test_full'][0]    
+          
+if __name__ == '__main__':
+    X_train_genes, Y_train, X_test_genes, Y_test = load_data()
+
+    input_shape_genes = X_train_genes.shape[1:]  
+    num_classes = Y_train.shape[1]  
+    model = create_model(input_shape_genes, num_classes)
+
+    num_folds = 5
+    best_model = None
+    best_accuracy = 0
+
+    for fold in range(num_folds):
+        print(f"Training Fold {fold + 1}...")
+
+        fold_size = len(X_train_genes) // num_folds
+        val_start = fold * fold_size
+        val_end = (fold + 1) * fold_size
+
+        X_train_fold_genes = np.concatenate((X_train_genes[:val_start], X_train_genes[val_end:]), axis=0)
+        X_val_genes = X_train_genes[val_start:val_end]
+        Y_train_fold = np.concatenate((Y_train[:val_start], Y_train[val_end:]), axis=0)
+        Y_val = Y_train[val_start:val_end]
+
+        model = create_model(X_train_fold_genes.shape[1:], Y_train_fold.shape[1])
+
+        accuracy, precision, recall, f1 = train_and_evaluate(model, X_train_fold_genes, Y_train_fold,
+                                                             X_val_genes, Y_val)
+
+        print(f"Fold {fold + 1} - Accuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}")
+
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            best_model = model
+
+    final_accuracy, final_precision, final_recall, final_f1 = train_and_evaluate(best_model, X_train_genes, Y_train, X_test_genes, Y_test)
+
+    print(f"Final Test - Accuracy: {final_accuracy:.4f}, Precision: {final_precision:.4f}, Recall: {final_recall:.4f}, F1: {final_f1:.4f}")
+
+    X_test_genes_full, Y_test_full = load_test_data()
+
+final_preds = best_model.predict(X_test_genes_full)
+
+    for i in range(Y_test_full.shape[1]):
+        y_true = Y_test_full[:, i]
+        y_pred = (final_preds[:, i] > 0.5).astype(int)
+        acc = accuracy_score(y_true, y_pred)
+        precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='binary', zero_division=0)
+        print(f"Antibiotic {i + 1}: Accuracy: {acc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+
+    avg_precision, avg_recall, avg_f1, _ = precision_recall_fscore_support(Y_test_full, (final_preds > 0.5).astype(int),
+                                                                           average='micro', zero_division=0)
+    print("\nOverall Metrics:")
+    print("-" * 50)
+    print(f"Precision: {avg_precision:.4f}, Recall: {avg_recall:.4f}, F1-Score: {avg_f1:.4f}")
