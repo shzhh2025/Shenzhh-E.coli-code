@@ -1,0 +1,207 @@
+%% Data Splitting
+% Author: Zhonghua Shen
+% Date: 2025-12-05
+% Description: Script for splitting the dataset into training, testing，and validation. 
+
+%% -------------------------------
+% Data Splitting
+%% -------------------------------
+
+
+
+
+
+
+% Raman alone
+Loaded Data = load('DataP .mat');
+Loaded Data = load('labels .mat');
+
+% Random Seed
+rng(1);
+
+% 20% for test
+numSamples = size(DataP, 1);
+testRatio = 0.2;  
+numTest = round(numSamples * testRatio);  
+
+testIdx = randperm(numSamples, numTest);  
+
+testData = DataP(testIdx, :);
+testLabels = labels(testIdx, :);
+
+% 80% for train
+trainData = DataP(setdiff(1:numSamples, testIdx), :);
+trainLabels = labels(setdiff(1:numSamples, testIdx), :);
+
+%  5 folds
+numFolds = 5;
+cv = cvpartition(size(trainData, 1), 'KFold', numFolds); 
+
+outputFolder = 'DataSplits/';
+if ~exist(outputFolder, 'dir')
+    mkdir(outputFolder);
+end
+
+cross_validation_data = struct();
+
+for i = 1:numFolds
+    foldTrainData = trainData(training(cv, i), :);  
+    foldTestData = trainData(test(cv, i), :);           
+    foldTrainLabels = trainLabels(training(cv, i), :);  
+    foldTestLabels = trainLabels(test(cv, i), :);       
+    
+    save(fullfile(outputFolder, sprintf('fold%d_train.mat', i)), 'foldTrainData', 'foldTrainLabels');
+    save(fullfile(outputFolder, sprintf('fold%d_test.mat', i)), 'foldTestData', 'foldTestLabels');
+    
+    cross_validation_data.X_train_spectra{i} = foldTrainData;
+    cross_validation_data.X_test_spectra{i} = foldTestData;
+    cross_validation_data.Y_train{i} = foldTrainLabels;
+    cross_validation_data.Y_test{i} = foldTestLabels;
+end
+
+cross_validation_data.X_test_spectra_full = testData;   
+cross_validation_data.Y_test_full = testLabels;         
+
+save(fullfile(outputFolder, 'test_data.mat'), 'testData', 'testLabels');
+save('cross_validation_data.mat', 'cross_validation_data');
+
+
+
+
+
+% Raman and ARGs
+loadedData = load('DataP .mat');
+loadedData = load('labels .mat');
+loadedData = load('resistance_gene .mat');
+
+% Random Seed
+rng(1);
+
+% 20% for test
+numSamples = size(DataP, 1);
+testRatio = 0.2;  
+numTest = round(numSamples * testRatio);  
+
+testIdx = randperm(numSamples, numTest);  
+
+testData = DataP(testIdx, :);
+testLabels = labels(testIdx, :);
+testGenes = resistance_gene(testIdx, :);  
+
+%  80% for train
+trainData = DataP(setdiff(1:numSamples, testIdx), :);
+trainLabels = labels(setdiff(1:numSamples, testIdx), :);
+trainGenes = resistance_gene(setdiff(1:numSamples, testIdx), :); 
+
+%  5 folds
+numFolds = 5;
+cv = cvpartition(size(trainData, 1), 'KFold', numFolds);  
+
+outputFolder = 'DataSplits/';
+if ~exist(outputFolder, 'dir')
+    mkdir(outputFolder);
+end
+
+cross_validation_data = struct();
+
+for i = 1:numFolds
+    foldTrainData = trainData(training(cv, i), :);  
+    foldTestData = trainData(test(cv, i), :);       
+    foldTrainLabels = trainLabels(training(cv, i), :);  
+    foldTestLabels = trainLabels(test(cv, i), :);       
+    foldTrainGenes = trainGenes(training(cv, i), :);    
+    foldTestGenes = trainGenes(test(cv, i), :);         
+    
+    save(fullfile(outputFolder, sprintf('fold%d_train.mat', i)), 'foldTrainData', 'foldTrainLabels', 'foldTrainGenes');
+    save(fullfile(outputFolder, sprintf('fold%d_test.mat', i)), 'foldTestData', 'foldTestLabels', 'foldTestGenes');
+    
+    cross_validation_data.X_train_spectra{i} = foldTrainData;
+    cross_validation_data.X_test_spectra{i} = foldTestData;
+    cross_validation_data.Y_train{i} = foldTrainLabels;
+    cross_validation_data.Y_test{i} = foldTestLabels;
+    cross_validation_data.X_train_genes{i} = foldTrainGenes;
+    cross_validation_data.X_test_genes{i} = foldTestGenes;
+end
+
+cross_validation_data.X_test_spectra_full = testData;   
+cross_validation_data.Y_test_full = testLabels;         
+cross_validation_data.X_test_genes_full = testGenes;    
+
+save(fullfile(outputFolder, 'test_data.mat'), 'testData', 'testLabels', 'testGenes');
+save('cross_validation_data.mat', 'cross_validation_data');
+
+
+
+
+
+% Raman, ARGs and VFs
+loadedData = load('DataP .mat');
+loadedData = load('labels .mat');
+loadedData = load('resistance_gene .mat');
+loadedData = load('virulence_gene .mat');
+
+% Random Seed
+rng(1);
+
+%  20% for test
+numSamples = size(DataP, 1);
+testRatio = 0.2;  
+numTest = round(numSamples * testRatio);  
+
+testIdx = randperm(numSamples, numTest);  
+
+testData = DataP(testIdx, :);
+testLabels = labels(testIdx, :);
+testResistanceGenes = resistance_gene(testIdx, :);  
+testVirulenceGenes = virulence_gene(testIdx, :);    
+
+% 80% for train
+trainData = DataP(setdiff(1:numSamples, testIdx), :);
+trainLabels = labels(setdiff(1:numSamples, testIdx), :);
+trainResistanceGenes = resistance_gene(setdiff(1:numSamples, testIdx), :);  
+trainVirulenceGenes = virulence_gene(setdiff(1:numSamples, testIdx), :);    
+
+trainGenes = [trainResistanceGenes, trainVirulenceGenes];   
+testGenes = [testResistanceGenes, testVirulenceGenes];       
+
+% 5 folds
+numFolds = 5;
+cv = cvpartition(size(trainData, 1), 'KFold', numFolds);  
+
+outputFolder = 'DataSplits/';
+if ~exist(outputFolder, 'dir')
+    mkdir(outputFolder);
+end
+
+cross_validation_data = struct();
+
+for i = 1:numFolds
+    foldTrainData = trainData(training(cv, i), :);  
+    foldTestData = trainData(test(cv, i), :);       
+    foldTrainLabels = trainLabels(training(cv, i), :);  
+    foldTestLabels = trainLabels(test(cv, i), :);       
+foldTrainGenes = trainGenes(training(cv, i), :);    
+foldTestGenes = trainGenes(test(cv, i), :);         
+    
+    save(fullfile(outputFolder, sprintf('fold%d_train.mat', i)), 'foldTrainData', 'foldTrainLabels', 'foldTrainGenes');
+    save(fullfile(outputFolder, sprintf('fold%d_test.mat', i)), 'foldTestData', 'foldTestLabels', 'foldTestGenes');
+    
+    cross_validation_data.X_train_spectra{i} = foldTrainData;
+    cross_validation_data.X_test_spectra{i} = foldTestData;
+    cross_validation_data.Y_train{i} = foldTrainLabels;
+    cross_validation_data.Y_test{i} = foldTestLabels;
+    
+    cross_validation_data.X_train_genes{i} = foldTrainGenes;
+    cross_validation_data.X_test_genes{i} = foldTestGenes;
+end
+
+cross_validation_data.X_test_spectra_full = testData;   
+cross_validation_data.Y_test_full = testLabels;         
+cross_validation_data.X_test_genes_full = testGenes;    
+
+save(fullfile(outputFolder, 'test_data.mat'), 'testData', 'testLabels', 'testGenes');
+save('cross_validation_data.mat', 'cross_validation_data');
+
+
+% Raman, ARGs and VFs
+% Similar to the partitioning of “Raman, ARGs, and VFs” datasets, except for Raman data.
