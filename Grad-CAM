@@ -1,0 +1,79 @@
+%% Grad-CAM
+% Author: Zhonghua Shen
+% Date: 2025-12-05
+% Description: Grad-CAM Calculated
+
+%% -------------------------------
+% Grad-CAM 
+%% -------------------------------
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Model
+
+% Grad-CAM
+def compute_grad_cam(model, spectra_input, genes_input, layer_name, class_idx):
+    grad_model = Model(
+        inputs=model.inputs,
+        outputs=[model.get_layer(layer_name).output, model.output]
+    )
+
+    with tf.GradientTape() as tape:
+        conv_outputs, predictions = grad_model([spectra_input, genes_input])
+        loss = predictions[:, class_idx]
+
+    grads = tape.gradient(loss, conv_outputs)
+
+    # GAP pooling
+    weights = tf.reduce_mean(grads, axis=1)
+
+    cam = tf.reduce_sum(weights[:, None, :] * conv_outputs, axis=-1).numpy()[0]
+
+    cam = np.maximum(cam, 0)
+    if np.max(cam) > 0:
+        cam = cam / np.max(cam)
+
+    return cam
+
+def plot_grad_cam_with_background(heatmap, spectrum, save_name):
+    plt.figure(figsize=(10,5))
+
+    plt.plot(np.linspace(600,1800,len(spectrum)), spectrum, color='blue', linewidth=1.5)
+
+    plt.imshow(heatmap[np.newaxis,:], 
+               cmap='jet', aspect='auto',
+               extent=[600,1800, np.min(spectrum), np.max(spectrum)],
+               alpha=0.45)
+
+    plt.colorbar(label="Importance")
+    plt.xlabel("Raman Shift (cm⁻¹)")
+    plt.ylabel("Intensity")
+    plt.title(save_name)
+    plt.savefig(save_name + ".svg", dpi=300, bbox_inches='tight')
+    plt.close()
+
+num_samples = X_test_spectra_full.shape[0]
+num_classes = Y_test_full.shape[1]
+
+for sample_idx in range(num_samples):
+
+    spectra_input_sample = X_test_spectra_full[sample_idx:sample_idx+1]
+    genes_input_sample = X_test_genes_full[sample_idx:sample_idx+1]
+
+    for class_idx in range(num_classes):
+
+        cam = compute_grad_cam(
+            best_model,
+            spectra_input_sample,
+            genes_input_sample,
+            layer_name="conv1d_2",  
+            class_idx=class_idx
+        )
+
+        save_title = f"gradcam_fulltest_sample{sample_idx}_class{class_idx+1}"
+        plot_grad_cam_with_background(
+            cam,
+            spectra_input_sample[0,:,0],
+            save_title
+        )
