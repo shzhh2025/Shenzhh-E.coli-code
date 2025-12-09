@@ -1,0 +1,82 @@
+%% Lasso
+% Author: Zhonghua Shen
+% Date: 2025-12-05
+% Description: Lasso for ARGs and VFs 
+
+%% -------------------------------
+% Lasso 
+%% -------------------------------
+
+Loaded Data = load('gene_data');
+Loaded Data = load('phenotype_data');
+
+resistance_gene_names = {'CTX-M', 'TEM', 'OXA', 'DHA', 'aph(3'''')-Ib', ...
+    'aph(6)-Id', 'aadA5', 'aph(3'''')-IIa', 'aph(3'''')-Ia', 'aac(3)-II', ...
+    'mph(A)', 'erm(B)', 'qnr', 'qepA', 'sul3', 'sul2', 'sul1', ...
+    'tet(A)', 'fosA3', 'floR', 'cmlA1', 'cat', 'dfrA17', 'qacE'};
+
+virulence_gene_names = {'fim', 'csg/cgs', 'ecp', 'kps', 'dra', ...
+    'cfa', 'pap', 'ompA', 'fdec', 'sat', 'tsh', 'fha', 'ibeABC', ...
+    'neuABCDE', 'GSPdghek', 'ent', 'fep', 'iuc', 'iutA', 'fur', ...
+    'chu', 'iron', 'ybt', 'hcp/tssD', 'vgrG/tssI', 'clb', ...
+    'senB', 'tss', 'irp', 'espL', 'fes'};
+
+resistance_genes = gene_data(:, 1:24); 
+virulence_genes = gene_data(:, 25:end); 
+
+selected_resistance_indices = [];
+selected_virulence_indices = [];
+
+% ARGs selected
+for i = 1:size(phenotype_data, 2)
+    [B, FitInfo] = lasso(resistance_genes, phenotype_data(:, i), 'CV', 10, 'NumLambda', 200);
+    idxLambda1SE = FitInfo.Index1SE;
+selected_indices = find(B(:, idxLambda1SE) ~= 0); 
+selected_resistance_indices = unique([selected_resistance_indices; selected_indices]);
+end
+
+filtered_resistance_genes = resistance_genes(:, selected_resistance_indices);
+
+% VFs selected
+for i = 1:size(phenotype_data, 2)
+    [B, FitInfo] = lasso(virulence_genes, phenotype_data(:, i), 'CV', 10, 'NumLambda', 200);
+    idxLambda1SE = FitInfo.Index1SE;
+    selected_indices = find(B(:, idxLambda1SE) ~= 0); 
+    selected_virulence_indices = unique([selected_virulence_indices; selected_indices]);
+end
+
+filtered_virulence_genes = virulence_genes(:, selected_virulence_indices);
+
+% Combining ARGs and VFs
+filtered_gene_data = [filtered_resistance_genes, filtered_virulence_genes];
+
+save('filtered_gene_data.mat', 'filtered_resistance_genes', 'selected_resistance_indices', ...
+    'filtered_virulence_genes', 'selected_virulence_indices', 'filtered_gene_data');
+
+% LASSO pathway diagram and cross-validation diagram of ARGs
+[B, FitInfo] = lasso(resistance_genes, phenotype_data(:, 1), 'CV', 10, 'NumLambda', 200);
+
+figure;
+subplot(1, 2, 1); 
+lassoPlot(B, FitInfo, 'PlotType', 'Lambda', 'XScale', 'log');
+xlabel('log(\lambda)');
+ylabel('Coefficients');
+
+subplot(1, 2, 2); 
+lassoPlot(B, FitInfo, 'PlotType', 'CV');
+xlabel('log(\lambda)');
+ylabel('Partial Likelihood Deviance');
+
+% LASSO pathway diagram and cross-validation diagram of VFs
+[B, FitInfo] = lasso(virulence_genes, phenotype_data(:, 1), 'CV', 10, 'NumLambda', 200);
+
+figure;
+subplot(1, 2, 1); 
+lassoPlot(B, FitInfo, 'PlotType', 'Lambda', 'XScale', 'log');
+xlabel('log(\lambda)');
+ylabel('Coefficients');
+
+subplot(1, 2, 2); 
+lassoPlot(B, FitInfo, 'PlotType', 'CV');
+xlabel('log(\lambda)');
+ylabel('Partial Likelihood Deviance');
