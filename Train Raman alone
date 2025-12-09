@@ -1,0 +1,114 @@
+%% Raman alone
+% Author: Zhonghua Shen
+% Date: 2025-12-05
+% Description: Train CNN for Raman alone dataset
+
+%% -------------------------------
+% Raman alone
+%% -------------------------------
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, InputLayer
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+import scipy.io as sio
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping
+
+% Open the Data
+loadedData = load('cross_validation_Raman.mat');
+    cross_val_data = data['cross_validation_Raman'][0, 0]
+
+    X_train_spectra = [cross_val_data['X_train_spectra'][0, i] for i in range(5)]
+    Y_train = [cross_val_data['Y_train'][0, i] for i in range(5)]
+    X_test_spectra_full = cross_val_data['X_test_spectra_full']
+    Y_test_full = cross_val_data['Y_test_full']
+
+X_train_spectra = [np.expand_dims(fold, axis=-1) for fold in X_train_spectra]  
+X_test_spectra_full = np.expand_dims(X_test_spectra_full, axis=-1)  
+
+% CNN 
+def create_model(input_shape, num_classes):
+    model = Sequential([
+        InputLayer(input_shape=input_shape),  
+        Conv1D(16, kernel_size=5, padding='same', activation='relu'),
+        MaxPooling1D(pool_size=2, strides=2),
+        Conv1D(32, kernel_size=3, padding='same', activation='relu'),
+        MaxPooling1D(pool_size=2, strides=2),
+        Conv1D(64, kernel_size=3, padding='same', activation='relu'),
+        Flatten(),
+        Dropout(0.5),
+
+        Dense(128, activation='relu'),
+        Dense(64, activation='relu'), 
+Dense(22, activation='relu'),
+        Dense(num_classes, activation='sigmoid')  
+    ])
+    return model
+
+if __name__ == '__main__':
+    print("Loading data...")
+    X_train_spectra, Y_train, X_test_spectra_full, Y_test_full, cross_val_data = load_data()
+    input_shape = X_train_spectra[0].shape[1:]  状
+    num_classes = Y_train[0].shape[1]  
+    model = create_model(input_shape, num_classes)
+
+    model.compile(optimizer='adam',
+                  loss='binary_crossentropy',
+                  metrics=['accuracy'])
+
+% Train
+    best_fold_idx = None
+    best_val_accuracy = 0
+
+    for fold_idx in range(len(X_train_spectra)):  
+        print(f"\nTraining Fold {fold_idx + 1}...")
+
+        X_train = X_train_spectra[fold_idx]
+        Y_train_fold = Y_train[fold_idx]
+        X_test_spectra = cross_val_data['X_test_spectra'][0, fold_idx]  
+        Y_test_fold = cross_val_data['Y_test'][0, fold_idx]  
+        print(f"X_test_spectra.shape: {X_test_spectra.shape}")
+        print(f"Y_test_fold.shape: {Y_test_fold.shape}")
+        
+        model = create_model(input_shape, num_classes)
+        model.compile(optimizer='adam',
+                      loss='binary_crossentropy',
+                      metrics=['accuracy'])
+
+            checkpoint_callback = ModelCheckpoint(
+            filepath=f'best_model_fold_{fold_idx+1}.h5',
+            monitor='val_loss',
+            save_best_only=True,
+            verbose=1
+        )
+
+       early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+        model.fit(X_train, Y_train_fold, validation_data=(np.expand_dims(X_test_spectra, axis=-1), Y_test_fold),
+                  batch_size=32, epochs=20, verbose=1, callbacks=[checkpoint_callback, early_stopping])
+
+        val_accuracy = model.evaluate(np.expand_dims(X_test_spectra, axis=-1), Y_test_fold, verbose=0)[1]
+        if val_accuracy > best_val_accuracy:
+            best_val_accuracy = val_accuracy
+            best_fold_idx = fold_idx  
+
+% Evaluation
+    best_model = tf.keras.models.load_model(f'best_model_fold_{best_fold_idx + 1}.h5')
+
+    print("Evaluating the model...")
+    preds = best_model.predict(X_test_spectra_full)
+
+    print("\nPer Antibiotic Results:")
+    print("-" * 50)
+    for i in range(Y_test_full.shape[1]):
+        y_true = Y_test_full[:, i]
+        y_pred = (preds[:, i] > 0.5).astype(int)
+        acc = accuracy_score(y_true, y_pred)
+        precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average='binary', zero_division=0)
+        print(f"Antibiotic {i + 1}: Accuracy: {acc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+        avg_precision, avg_recall, avg_f1, _ = precision_recall_fscore_support(Y_test_full, (preds > 0.5).astype(int),
+                                                                           average='micro', zero_division=0)
+    print("\nOverall Metrics:")
+    print("-" * 50)
+    print(f"Precision: {avg_precision:.4f}, Recall: {avg_recall:.4f}, F1-Score: {avg_f1:.4f}")
